@@ -150,7 +150,44 @@ const changeAvatar = async (req, res, next) => {
     Protected: Yes
 */
 const editUser = async (req, res, next) => {
-    res.json('Edit user details')
+    try {
+        const { name, email, currentPassword, newPassword, newConfirmPassword } = req.body;
+        if (!name || !email || !currentPassword || !newPassword || !newConfirmPassword) {
+            return next(new HttpError('Fill in all fields', 422));
+        }
+        //get user  from database
+        const user = await User.findById(req.user.id);
+        if (!user) {
+            return next(new HttpError('User not found', 404));
+        }
+        //make sure new email does not already exist
+        const emailExists = await User.findOne({ email });
+        //we want to update other details with/without changing the email(witch is a unique id because we use it to login)
+        if (emailExists && (emailExists._id != req.user.id)) {
+            return next(new HttpError('Email already exits', 422));
+        }
+        //compare current password to db password
+        const validateUserPassword = await bcrypt.compare(currentPassword, user.password);
+        if (!validateUserPassword) {
+            return next(new HttpError('Invalid current password', 422));
+        }
+
+        //compare new passwords
+        if (newPassword !== newConfirmPassword) {
+            return next(new HttpError('New passwords do not match', 422));
+        }
+
+        //has new password
+        const salt = await bcrypt.genSalt(10);
+        const hash = await bcrypt.hash(newPassword, salt);
+
+        //update user info in db
+        const newInfo = await User.findByIdAndUpdate(req.user.id, { name, email, password: hash }, { new: true })
+        res.status(200).json(newInfo);
+
+    } catch (error) {
+        return next(new HttpError(error));
+    }
 }
 /* 
     Get authors
